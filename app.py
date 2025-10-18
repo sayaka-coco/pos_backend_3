@@ -1,16 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, constr 
+from pydantic import BaseModel
 import requests
 import json
 from db_control import crud, mymodels_MySQL as mymodels
-
-
-class Customer(BaseModel):
-    customer_id: constr(min_length=4, max_length=4)  # 4文字ぴったり制限
-    customer_name: str
-    age: int
-    gender: str
 
 
 app = FastAPI()
@@ -28,62 +21,92 @@ app.add_middleware(
 
 @app.get("/")
 def index():
-    return {"message": "FastAPI top page!"}
+    return {"message": "POS Application API"}
 
 
-@app.post("/customers")
-def create_customer(customer: Customer):
-    values = customer.dict()
-    tmp = crud.myinsert(mymodels.Customers, values)
-    result = crud.myselect(mymodels.Customers, values.get("customer_id"))
-
-    if result:
-        result_obj = json.loads(result)
-        return result_obj if result_obj else None
-    return None
-
-
-@app.get("/customers")
-def read_one_customer(customer_id: str = Query(...)):
-    result = crud.myselect(mymodels.Customers, customer_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    result_obj = json.loads(result)
-    return result_obj[0] if result_obj else None
+# POS用エンドポイント
+@app.get("/items/{item_id}")
+def get_item(item_id: str):
+    """商品コードで商品を検索"""
+    Session = crud.sessionmaker(bind=crud.engine)
+    session = Session()
+    try:
+        item = session.query(mymodels.Items).filter(mymodels.Items.item_id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="商品が見つかりません")
+        return {
+            "item_id": item.item_id,
+            "item_name": item.item_name,
+            "price": item.price
+        }
+    finally:
+        session.close()
 
 
-@app.get("/allcustomers")
-def read_all_customer():
-    result = crud.myselectAll(mymodels.Customers)
-    # 結果がNoneの場合は空配列を返す
+@app.get("/items")
+def get_all_items():
+    """全商品を取得"""
+    result = crud.myselectAll(mymodels.Items)
     if not result:
         return []
-    # JSON文字列をPythonオブジェクトに変換
     return json.loads(result)
 
 
-@app.put("/customers")
-def update_customer(customer: Customer):
-    values = customer.dict()
-    values_original = values.copy()
-    tmp = crud.myupdate(mymodels.Customers, values)
-    result = crud.myselect(mymodels.Customers, values_original.get("customer_id"))
-    if not result:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    result_obj = json.loads(result)
-    return result_obj[0] if result_obj else None
+class PurchaseRequest(BaseModel):
+    customer_id: str = "0000"  # デフォルト顧客
+    items: list[dict]  # [{"item_id": "1234567890", "quantity": 1}, ...]
 
 
-@app.delete("/customers")
-def delete_customer(customer_id: str = Query(...)):
-    result = crud.mydelete(mymodels.Customers, customer_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    return {"customer_id": customer_id, "status": "deleted"}
+@app.post("/purchases")
+def create_purchase(purchase: PurchaseRequest):
+    """購入処理"""
+    from datetime import datetime
+    Session = crud.sessionmaker(bind=crud.engine)
+    session = Session()
 
+    try:
+        # 購入IDを生成（タイムスタンプベース）
+        purchase_id = datetime.now().strftime("%Y%m%d%H%M%S")[:10]
+        purchase_date = datetime.now().strftime("%Y-%m-%d")
 
-@app.get("/fetchtest")
-def fetchtest():
-    response = requests.get('https://jsonplaceholder.typicode.com/users')
-    return response.json()
+        # 合計金額を事前計算
+        total_amount = 0
+        for item in purchase.items:
+            item_data = session.query(mymodels.Items).filter(
+                mymodels.Items.item_id == item["item_id"]
+            ).first()
+            if not item_data:
+                raise HTTPException(status_code=404, detail=f"商品が見つかりません: {item['item_id']}")
+            total_amount += item_data.price * item["quantity"]
+
+        # 購入レコード作成（合計金額を含む）
+        purchase_data = {
+            "purchase_id": purchase_id,
+            "customer_id": purchase.customer_id,
+            "purchase_date": purchase_date,
+            "total_amount": total_amount
+        }
+        crud.myinsert(mymodels.Purchases, purchase_data)
+
+        # 購入詳細レコード作成
+        for idx, item in enumerate(purchase.items):
+            detail_data = {
+                "detail_id": f"{purchase_id}{idx:02d}",
+                "purchase_id": purchase_id,
+                "item_id": item["item_id"],
+                "quantity": item["quantity"]
+            }
+            crud.myinsert(mymodels.PurchaseDetails, detail_data)
+
+        return {
+            "purchase_id": purchase_id,
+            "total_amount": total_amount,
+            "purchase_date": purchase_date
+        }
+
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
 

@@ -8,7 +8,14 @@ import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 import json
 import pandas as pd
-from db_control.connect_MySQL import engine
+
+# ローカル環境ではSQLite、本番環境ではMySQLを使用
+import os
+if os.getenv('USE_MYSQL') == 'true':
+    from db_control.connect_MySQL import engine
+else:
+    from db_control.connect_SQLite import engine
+
 from db_control.mymodels_MySQL import Customers
 
 

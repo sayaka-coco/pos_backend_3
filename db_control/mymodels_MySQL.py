@@ -16,7 +16,7 @@ class Customers(Base):
 
 class Items(Base):
     __tablename__ = 'items'
-    item_id: Mapped[str] = mapped_column(String(10), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(13), primary_key=True)  # JANコード(13桁)
     item_name: Mapped[str] = mapped_column(String(100))
     price: Mapped[int] = mapped_column(Integer)
 
@@ -26,11 +26,12 @@ class Purchases(Base):
     purchase_id: Mapped[str] = mapped_column(String(10), primary_key=True)
     customer_id: Mapped[str] = mapped_column(String(10), ForeignKey("customers.customer_id"))
     purchase_date: Mapped[str] = mapped_column(String(10))
+    total_amount: Mapped[int] = mapped_column(Integer)  # 合計金額（税込）
 
 
 class PurchaseDetails(Base):
     __tablename__ = 'purchase_details'
-    detail_id: Mapped[str] = mapped_column(String(10), primary_key=True)
+    detail_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     purchase_id: Mapped[str] = mapped_column(String(10), ForeignKey("purchases.purchase_id"))
-    item_id: Mapped[str] = mapped_column(String(10), ForeignKey("items.item_id"))
+    item_id: Mapped[str] = mapped_column(String(13), ForeignKey("items.item_id"))
     quantity: Mapped[int] = mapped_column(Integer)
