@@ -110,3 +110,13 @@ def create_purchase(purchase: PurchaseRequest):
     finally:
         session.close()
 
+@app.get("/db-check")
+def db_check():
+    try:
+        db = SessionLocal()
+        result = db.execute(text("SELECT 1")).fetchone()
+        return {"status": "connected", "result": result[0]}
+    except OperationalError as e:
+        return {"status": "error", "details": str(e)}
+    finally:
+        db.close()
