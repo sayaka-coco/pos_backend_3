@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 *.db
 nul
+check_azure_db.py

@@ -24,6 +24,9 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=3600,
     connect_args={
-        "ssl_ca": SSL_CA_PATH
+        "ssl": {
+            "ca": SSL_CA_PATH,
+            "check_hostname": False
+        }
     }
 )
