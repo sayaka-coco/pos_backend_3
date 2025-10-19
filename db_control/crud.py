@@ -7,7 +7,6 @@ from sqlalchemy import create_engine, insert, delete, update, select
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 import json
-import pandas as pd
 
 # ローカル環境ではSQLite、本番環境ではMySQLを使用
 import os
@@ -75,8 +74,15 @@ def myselectAll(mymodel):
     try:
         # トランザクションを開始
         with session.begin():
-            df = pd.read_sql_query(query, con=engine)
-            result_json = df.to_json(orient='records', force_ascii=False)
+            result = session.execute(query).fetchall()
+            # 結果を辞書のリストに変換
+            result_list = []
+            for row in result:
+                row_dict = {}
+                for column in mymodel.__table__.columns:
+                    row_dict[column.name] = getattr(row[0], column.name)
+                result_list.append(row_dict)
+            result_json = json.dumps(result_list, ensure_ascii=False)
 
     except sqlalchemy.exc.IntegrityError:
         print("一意制約違反により、挿入に失敗しました")
